@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        choice(name: 'ENV', choices: ['staging'], description: 'Choose non-dev environment')
+        choice(name: 'ENV', choices: ['prod'], description: 'Choose non-dev environment') 
     }
 
     environment {
@@ -12,7 +12,7 @@ pipeline {
 
         DB_PASSWORD = credentials('rds-db-password')
         DB_USERNAME = credentials('rds-db-username')
-        ECR_REPO = 'your-account-id.dkr.ecr.${AWS_REGION}.amazonaws.com/myapp'
+        ECR_REPO = "your-account-id.dkr.ecr.\${AWS_REGION}.amazonaws.com/myapp"
     }
 
     tools {
@@ -90,6 +90,12 @@ pipeline {
                         '''
                     }
                 }
+            }
+        }
+
+        stage('Approval for ArgoCD Sync') {
+            steps {
+                input message: "Approve ArgoCD deployment to PROD?", ok: "Deploy"
             }
         }
 
