@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        choice(name: 'ENV', choices: ['dev'], description: 'Only dev is allowed in this branch')
+        choice(name: 'ENV', choices: ['staging'], description: 'Choose non-dev environment')
     }
 
     environment {
@@ -13,13 +13,10 @@ pipeline {
         DB_PASSWORD = credentials('rds-db-password')
         DB_USERNAME = credentials('rds-db-username')
         ECR_REPO = 'your-account-id.dkr.ecr.${AWS_REGION}.amazonaws.com/myapp'
-
-        SONARQUBE_ENV = 'SonarQube-Server' // Jenkins global tool config name
     }
 
     tools {
         terraform 'terraform-1.6'
-        dockerTool 'docker'
     }
 
     options {
@@ -32,21 +29,6 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-            }
-        }
-
-        stage('Lint & Dummy Tests') {
-            steps {
-                dir('app') {
-                    sh '''
-                        echo "Running ESLint..."
-                        npm install --silent
-                        npx eslint ./src || true
-
-                        echo "Running dummy unit tests..."
-                        echo "All tests passed!" # Replace with real test command like: npm test
-                    '''
-                }
             }
         }
 
@@ -91,62 +73,20 @@ pipeline {
             }
         }
 
-        stage('SonarQube Code Analysis') {
-            environment {
-                SCANNER_HOME = tool name: 'SonarQubeScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-            }
-            steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    dir('app') {
-                        sh '''
-                            ${SCANNER_HOME}/bin/sonar-scanner \
-                              -Dsonar.projectKey=myapp \
-                              -Dsonar.sources=./src \
-                              -Dsonar.host.url=$SONAR_HOST_URL \
-                              -Dsonar.login=$SONAR_AUTH_TOKEN
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                dir('app') {
-                    sh 'docker build -t $ECR_REPO:${GIT_COMMIT} .'
-                }
-            }
-        }
-
-        stage('Trivy Image Scan') {
-            steps {
-                sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL $ECR_REPO:${GIT_COMMIT}'
-            }
-        }
-
-        stage('Push Image to ECR') {
-            steps {
-                script {
-                    sh '''
-                        aws ecr get-login-password --region $AWS_REGION | \
-                        docker login --username AWS --password-stdin $ECR_REPO
-                        docker push $ECR_REPO:${GIT_COMMIT}
-                    '''
-                }
-            }
-        }
-
-        stage('Update K8s Manifest with Image Tag') {
+        stage('Fetch Docker Image Tag from Dev') {
             steps {
                 dir('app/deployment/k8s-manifests') {
                     script {
+                        def tag = sh(script: "git show origin/dev:app/deployment/k8s-manifests/deployment.yaml | grep 'image:' | awk -F ':' '{print \$3}'", returnStdout: true).trim()
+                        env.IMAGE_TAG = tag
+                        sh "sed -i 's|image:.*|image: $ECR_REPO:$IMAGE_TAG|' deployment.yaml"
+
                         sh '''
-                            sed -i "s|image:.*|image: $ECR_REPO:${GIT_COMMIT}|" deployment.yaml
                             git config user.name "jenkins-bot"
                             git config user.email "jenkins@ci.local"
                             git add deployment.yaml
-                            git commit -m "Update image tag to ${GIT_COMMIT} in dev"
-                            git push origin HEAD:dev
+                            git commit -m "Promote image $IMAGE_TAG to ${params.ENV}"
+                            git push origin HEAD:${params.ENV}
                         '''
                     }
                 }
@@ -155,7 +95,7 @@ pipeline {
 
         stage('ArgoCD Sync') {
             steps {
-                sh 'argocd app sync myapp-dev'
+                sh "argocd app sync myapp-${params.ENV}"
             }
         }
     }
