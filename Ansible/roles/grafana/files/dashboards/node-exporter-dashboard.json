@@ -1,0 +1,14 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "nodeexporter",
+    "title": "Node Exporter Full",
+    "tags": [
+      "templated"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0
+  },
+  "overwrite": true
+}

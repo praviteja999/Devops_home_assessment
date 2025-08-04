@@ -1,0 +1,101 @@
+---
+- name: Install dependencies
+  apt:
+    name: apt-transport-https
+    state: present
+    update_cache: yes
+
+- name: Add Grafana APT key
+  apt_key:
+    url: https://packages.grafana.com/gpg.key
+    state: present
+
+- name: Add Grafana APT repository
+  apt_repository:
+    repo: deb https://packages.grafana.com/oss/deb stable main
+    state: present
+    filename: grafana
+
+- name: Install Grafana
+  apt:
+    name: grafana
+    state: present
+    update_cache: yes
+
+- name: Ensure grafana-server directory permissions
+  file:
+    path: /var/lib/grafana
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: 0755
+
+- name: Copy Grafana systemd unit file
+  copy:
+    src: grafana.service
+    dest: /etc/systemd/system/grafana.service
+    mode: '0644'
+
+- name: Reload systemd to pick up new unit file
+  systemd:
+    daemon_reload: yes
+
+- name: Enable and start Grafana
+  systemd:
+    name: grafana
+    enabled: true
+    state: started
+
+- name: Copy Grafana dashboards
+  copy:
+    src: "{{ item }}"
+    dest: "/var/lib/grafana/dashboards/{{ item | basename }}"
+  with_fileglob:
+    - "files/*dashboard.json"
+
+- name: Ensure dashboards directory exists
+  file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: '0755'
+
+- name: Import dashboards into Grafana
+  uri:
+    url: "http://localhost:3000/api/dashboards/db"
+    method: POST
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer admin:admin"  
+    body: "{{ lookup('file', item) }}"
+    body_format: json
+    status_code: 200
+  with_items:
+    - "/var/lib/grafana/dashboards/node-exporter-dashboard.json"
+    - "/var/lib/grafana/dashboards/kube-state-metrics-dashboard.json"
+  ignore_errors: yes
+
+- name: Create provisioning folders
+  file:
+    path: "/etc/grafana/provisioning/{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - notifiers
+    - alerting
+
+- name: Copy notifier config
+  copy:
+    src: files/provisioning/notifiers/slack.yaml
+    dest: /etc/grafana/provisioning/notifiers/slack.yaml
+
+- name: Copy alert rule config
+  copy:
+    src: files/provisioning/alerting/rule.yaml
+    dest: /etc/grafana/provisioning/alerting/rule.yaml
+
+- name: Restart Grafana
+  service:
+    name: grafana-server
+    state: restarted

@@ -1,0 +1,37 @@
+# roles/grafana/files/provisioning/alerting/rule.yaml
+groups:
+  - name: node_alerts
+    interval: 1m
+    rules:
+      - uid: cpu_alert
+        title: High CPU Usage
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: avg(rate(node_cpu_seconds_total{mode="user"}[2m])) by (instance)
+              format: time_series
+              interval: ""
+              intervalFactor: 2
+              refId: A
+              step: 10
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: 0.8
+              format: time_series
+              refId: B
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "High CPU detected on {{ $labels.instance }}"
+        labels:
+          severity: warning

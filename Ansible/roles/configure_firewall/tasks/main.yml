@@ -1,0 +1,13 @@
+---
+- name: Allow Prometheus and Grafana ports
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - 3000  # Grafana
+    - 9090  # Prometheus
+
+- name: Enable UFW
+  ufw:
+    state: enabled

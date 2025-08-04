@@ -1,0 +1,16 @@
+[Unit]
+Description=Grafana instance
+Documentation=https://docs.grafana.org
+After=network.target
+
+[Service]
+Type=simple
+User=grafana
+Group=grafana
+Restart=on-failure
+ExecStart=/usr/sbin/grafana-server \
+  --config=/etc/grafana/grafana.ini \
+  --homepath=/usr/share/grafana
+
+[Install]
+WantedBy=multi-user.target

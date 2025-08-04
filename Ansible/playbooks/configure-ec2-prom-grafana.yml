@@ -1,0 +1,12 @@
+---
+- name: Configure Monitoring EC2 with Prometheus and Grafana
+  hosts: role_monitor
+  become: true
+  vars:
+    prometheus_version: "2.52.0"
+    grafana_version: "10.2.3"
+
+  roles:
+    - prometheus
+    - grafana
+    - configure_firewall

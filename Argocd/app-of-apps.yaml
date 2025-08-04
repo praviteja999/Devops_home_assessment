@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp-dev
+  namespace: application
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/praviteja999/Devops_home_assessment.git'
+    targetRevision: dev
+    path: app/deployment/k8s-manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: application
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

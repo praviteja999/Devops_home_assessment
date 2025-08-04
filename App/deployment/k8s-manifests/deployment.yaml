@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodejs-app
+  namespace: application
+  labels:
+    app: nodejs-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nodejs-app
+  template:
+    metadata:
+      labels:
+        app: nodejs-app
+    spec:
+      serviceAccountName: nodejs-app-sa
+      containers:
+        - name: nodejs-app
+          image: <ECR_REPO>:<TAG>  # Replace via CI/CD
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aws-secrets-manager:my-db-creds
+                  key: password
+            - name: APPD_CONTROLLER_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: appd-secrets
+                  key: controller-host
+            - name: APPD_ACCOUNT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: appd-secrets
+                  key: account-name
+            - name: APPD_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: appd-secrets
+                  key: access-key
+            - name: APPD_APP_NAME
+              value: "myapp-${ENV}"
+            - name: APPD_TIER_NAME
+              value: "tier-${ENV}"
+            - name: APPD_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 15

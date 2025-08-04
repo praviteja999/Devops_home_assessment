@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: webapp-rollout
+  namespace: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+        - name: webapp
+          image: praviteja999/webapp:latest
+          ports:
+            - containerPort: 3000
+  strategy:
+    blueGreen:
+      activeService: webapp-service
+      previewService: webapp-preview
+      autoPromotionEnabled: false

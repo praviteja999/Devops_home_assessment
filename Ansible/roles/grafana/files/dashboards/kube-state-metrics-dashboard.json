@@ -1,0 +1,14 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "ksm",
+    "title": "Kubernetes Cluster Monitoring (KSM)",
+    "tags": [
+      "templated"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0
+  },
+  "overwrite": true
+}

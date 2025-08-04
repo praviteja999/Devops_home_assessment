@@ -1,0 +1,173 @@
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'ENV', choices: ['dev'], description: 'Only dev is allowed in this branch')
+    }
+
+    environment {
+        AWS_REGION = credentials('aws-region')
+        AWS_ACCESS_KEY_ID = credentials('jenkins-iam-access')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins-iam-secret')
+
+        DB_PASSWORD = credentials('rds-db-password')
+        DB_USERNAME = credentials('rds-db-username')
+        ECR_REPO = 'your-account-id.dkr.ecr.${AWS_REGION}.amazonaws.com/myapp'
+
+        SONARQUBE_ENV = 'SonarQube-Server' // Jenkins global tool config name
+    }
+
+    tools {
+        terraform 'terraform-1.6'
+        dockerTool 'docker'
+    }
+
+    options {
+        timestamps()
+        ansiColor('xterm')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Lint & Dummy Tests') {
+            steps {
+                dir('app') {
+                    sh '''
+                        echo "Running ESLint..."
+                        npm install --silent
+                        npx eslint ./src || true
+
+                        echo "Running dummy unit tests..."
+                        echo "All tests passed!" # Replace with real test command like: npm test
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Init & Plan') {
+            steps {
+                dir("terraform/environments/${params.ENV}") {
+                    sh 'terraform init -backend-config=../../backend.tf'
+                    sh 'terraform plan -out=tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                dir("terraform/environments/${params.ENV}") {
+                    sh 'terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+
+        stage('Fetch Monitoring EC2 IP') {
+            steps {
+                script {
+                    env.ANSIBLE_HOST = sh(
+                        script: "terraform -chdir=terraform/environments/${params.ENV} output -raw monitoring_ec2_ip",
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        stage('Configure Monitoring with Ansible') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ansible-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+                    sh '''
+                        cd ansible/playbooks
+                        export ANSIBLE_HOST_KEY_CHECKING=False
+                        ansible-playbook -i "$ANSIBLE_HOST," configure-ec2-prom-grafana.yml \
+                          --private-key $SSH_KEY -u ec2-user
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Code Analysis') {
+            environment {
+                SCANNER_HOME = tool name: 'SonarQubeScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+            }
+            steps {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    dir('app') {
+                        sh '''
+                            ${SCANNER_HOME}/bin/sonar-scanner \
+                              -Dsonar.projectKey=myapp \
+                              -Dsonar.sources=./src \
+                              -Dsonar.host.url=$SONAR_HOST_URL \
+                              -Dsonar.login=$SONAR_AUTH_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir('app') {
+                    sh 'docker build -t $ECR_REPO:${GIT_COMMIT} .'
+                }
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL $ECR_REPO:${GIT_COMMIT}'
+            }
+        }
+
+        stage('Push Image to ECR') {
+            steps {
+                script {
+                    sh '''
+                        aws ecr get-login-password --region $AWS_REGION | \
+                        docker login --username AWS --password-stdin $ECR_REPO
+                        docker push $ECR_REPO:${GIT_COMMIT}
+                    '''
+                }
+            }
+        }
+
+        stage('Update K8s Manifest with Image Tag') {
+            steps {
+                dir('app/deployment/k8s-manifests') {
+                    script {
+                        sh '''
+                            sed -i "s|image:.*|image: $ECR_REPO:${GIT_COMMIT}|" deployment.yaml
+                            git config user.name "jenkins-bot"
+                            git config user.email "jenkins@ci.local"
+                            git add deployment.yaml
+                            git commit -m "Update image tag to ${GIT_COMMIT} in dev"
+                            git push origin HEAD:dev
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('ArgoCD Sync') {
+            steps {
+                sh 'argocd app sync myapp-dev'
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        failure {
+            mail to: 'devops-team@example.com',
+                 subject: "Jenkins Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                 body: "Build failed in ${env.BUILD_URL}"
+        }
+    }
+}

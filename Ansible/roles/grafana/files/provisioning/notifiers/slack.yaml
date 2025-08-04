@@ -1,0 +1,11 @@
+# roles/grafana/files/provisioning/notifiers/slack.yaml
+notifiers:
+  - name: Slack Alerts
+    type: slack
+    uid: slack-alerts
+    org_id: 1
+    is_default: true
+    settings:
+      url: "{{ slack_webhook_url }}"
+      recipient: '#alerts'
+      username: 'Grafana'
