@@ -1,8 +1,11 @@
 DevOps Home Assessment – Senior Role
 🌐 Objective
 Design, deploy, and manage a secure and scalable infrastructure to run a sample web application. This project demonstrates Infrastructure as Code, CI/CD automation, secret management, monitoring, and GitOps.
-Architecture Diagram
-
+Branches:
+1. Main
+2. Dev
+3. Staging
+4. Prod
 
 📁 Project Structure
 
@@ -169,4 +172,5 @@ CoreDNS policy, TLS, SaaS whitelist via egress rules
 
 
 ✅ Thank you for reviewing this submission!
+
 
