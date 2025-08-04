@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/praviteja999/Devops_home_assessment.git'
-    targetRevision: dev
+    targetRevision: staging
     path: app/deployment/k8s-manifests
   destination:
     server: https://kubernetes.default.svc
