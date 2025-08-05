@@ -161,7 +161,7 @@ CoreDNS policy, TLS, SaaS whitelist via egress rules
 
 📎 Submission Details
 
-- GitHub Repo: [Insert GitHub link here]
+
 - Submission includes:
   * Infrastructure as Code (Terraform)
   * Configuration Management (Ansible)
@@ -172,5 +172,6 @@ CoreDNS policy, TLS, SaaS whitelist via egress rules
 
 
 ✅ Thank you for reviewing this submission!
+
 
 
